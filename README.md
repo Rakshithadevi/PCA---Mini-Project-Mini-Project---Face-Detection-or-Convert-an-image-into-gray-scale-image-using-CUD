@@ -114,7 +114,8 @@ plt.show()
 ## Output:
 ![image](https://github.com/Rakshithadevi/PCA---Mini-Project-Mini-Project---Face-Detection-or-Convert-an-image-into-gray-scale-image-using-CUD/assets/94165326/c6f34488-69b6-4559-b793-c312aaaa8658)
 
-![Uploading image.png…]()
+![image](https://github.com/Rakshithadevi/PCA---Mini-Project-Mini-Project---Face-Detection-or-Convert-an-image-into-gray-scale-image-using-CUD/assets/94165326/ebe4d30f-a577-4367-82cc-e949ffde793f)
+
 
 
 ## Result:
