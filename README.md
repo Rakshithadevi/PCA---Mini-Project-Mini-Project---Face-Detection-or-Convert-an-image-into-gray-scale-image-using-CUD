@@ -15,120 +15,104 @@ The aim of this project is to demonstrate how to convert an image to grayscale u
 ## Program:
 ```
 
+!apt-get update
+!apt-get install -y nvidia-cuda-toolkit
+!pip install opencv-python
+
+%%writefile grayscale.cu
+
 #include <stdio.h>
-#include <string>
-#include <math.h>
-#include <iostream>
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/opencv.hpp>
+#include <cuda_runtime.h>
 
+#define CHANNELS 3
 
-__global__
-void colorConvertToGrey(unsigned char *rgb, unsigned char *grey, int rows, int cols)
-{
-	int col = threadIdx.x + blockIdx.x * blockDim.x;
-	int row = threadIdx.y + blockIdx.y * blockDim.y;
+__global__ 
+void colorConvertToGray(unsigned char *rgb, unsigned char *gray, int rows, int cols) {
+    int col = threadIdx.x + blockIdx.x * blockDim.x;
+    int row = threadIdx.y + blockIdx.y * blockDim.y;
 
-	if (col < cols && row < rows)
-	{
-		int grey_offset = row * cols + col;
-		int rgb_offset = grey_offset * CHANNELS;
-	
-    	unsigned char r = rgb[rgb_offset + 0];
-	    unsigned char g = rgb[rgb_offset + 1];
-	    unsigned char b = rgb[rgb_offset + 2];
-	
-	    grey[grey_offset] = r * 0.299f + g * 0.587f + b * 0.114f;
+    if (col < cols && row < rows) {
+        int gray_offset = row * cols + col;
+        int rgb_offset = gray_offset * CHANNELS;
+
+        unsigned char r = rgb[rgb_offset];
+        unsigned char g = rgb[rgb_offset + 1];
+        unsigned char b = rgb[rgb_offset + 2];
+
+        gray[gray_offset] = 0.299f * r + 0.587f * g + 0.114f * b;
     }
 }
 
-size_t loadImageFile(unsigned char *grey_image, const std::string &input_file, int *rows, int *cols );
+void loadImageFile(unsigned char **rgb_image, int *rows, int *cols, const std::string &file) {
+    cv::Mat img = cv::imread(file, cv::IMREAD_COLOR);
+    if (img.empty()) {
+        fprintf(stderr, "Error: Unable to load image %s\n", file.c_str());
+        exit(EXIT_FAILURE);
+    }
 
-void outputImage(const std::string &output_file, unsigned char *grey_image, int rows, int cols);
+    *rows = img.rows;
+    *cols = img.cols;
 
-unsigned char *h_rgb_image; 
-
-int main(int argc, char **argv) 
-{
-	std::string input_file;
-	std::string output_file;
-
-	switch(argc) {
-		case 3:
-			input_file = std::string(argv[1]);
-			output_file = std::string(argv[2]);
-            break;
-		default:
-			std::cerr << "Usage: <executable> input_file output_file";
-			exit(1);
-	}
-	
-	unsigned char *d_rgb_image; 
-	unsigned char *h_grey_image, *d_grey_image; 
-	int rows; 
-	int cols; 
-	
-	const size_t total_pixels = loadImageFile(h_grey_image, input_file, &rows, &cols);
-
-	h_grey_image = (unsigned char *)malloc(sizeof(unsigned char*)* total_pixels);
-
-	cudaMalloc(&d_rgb_image, sizeof(unsigned char) * total_pixels * CHANNELS);
-	cudaMalloc(&d_grey_image, sizeof(unsigned char) * total_pixels);
-	cudaMemset(d_grey_image, 0, sizeof(unsigned char) * total_pixels);
-	
-	cudaMemcpy(d_rgb_image, h_rgb_image, sizeof(unsigned char) * total_pixels * CHANNELS, cudaMemcpyHostToDevice);
-
-	const dim3 dimGrid((int)ceil((cols)/16), (int)ceil((rows)/16));
-	const dim3 dimBlock(16, 16);
-	
-	colorConvertToGrey<<<dimGrid, dimBlock>>>(d_rgb_image, d_grey_image, rows, cols);
-
-	cudaMemcpy(h_grey_image, d_grey_image, sizeof(unsigned char) * total_pixels, cudaMemcpyDeviceToHost);
-
-	outputImage(output_file, h_grey_image, rows, cols);
-	cudaFree(d_rgb_image);
-	cudaFree(d_grey_image);
-	return 0;
+    *rgb_image = (unsigned char*) malloc(*rows * *cols * CHANNELS * sizeof(unsigned char));
+    memcpy(*rgb_image, img.data, *rows * *cols * CHANNELS * sizeof(unsigned char));
 }
 
-size_t loadImageFile(unsigned char *grey_image, const std::string &input_file, int *rows, int *cols) 
-{
-	cv::Mat img_data; 
-
-	img_data = cv::imread(input_file.c_str(), CV_LOAD_IMAGE_COLOR);
-	if (img_data.empty()) 
-	{
-		std::cerr << "Unable to laod image file: " << input_file << std::endl;
-	}
-		
-	*rows = img_data.rows;
-	*cols = img_data.cols;
-
-	h_rgb_image = (unsigned char*) malloc(*rows * *cols * sizeof(unsigned char) * 3);
-	unsigned char* rgb_image = (unsigned char*)img_data.data;
-
-	int x = 0;
-	for (x = 0; x < *rows * *cols * 3; x++)
-	{
-		h_rgb_image[x] = rgb_image[x];
-	}
-	
-	size_t num_of_pixels = img_data.rows * img_data.cols;
-	
-	return num_of_pixels;
+void saveImageFile(const unsigned char *gray_image, int rows, int cols, const std::string &file) {
+    cv::Mat img(rows, cols, CV_8UC1, (void*)gray_image);
+    cv::imwrite(file, img);
 }
 
-void outputImage(const std::string& output_file, unsigned char* grey_image, int rows, int cols)
-{
+int main() {
+    std::string input_file = "input.jpg";
+    std::string output_file = "output.jpg";
 
-	cv::Mat greyData(rows, cols, CV_8UC1,(void *) grey_image);
-	cv::imwrite(output_file.c_str(), greyData);
+    unsigned char *h_rgb_image, *h_gray_image;
+    unsigned char *d_rgb_image, *d_gray_image;
+    int rows, cols;
+
+    loadImageFile(&h_rgb_image, &rows, &cols, input_file);
+
+    size_t image_size = rows * cols * CHANNELS * sizeof(unsigned char);
+    size_t gray_image_size = rows * cols * sizeof(unsigned char);
+
+    h_gray_image = (unsigned char*) malloc(gray_image_size);
+
+    cudaMalloc(&d_rgb_image, image_size);
+    cudaMalloc(&d_gray_image, gray_image_size);
+
+    cudaMemcpy(d_rgb_image, h_rgb_image, image_size, cudaMemcpyHostToDevice);
+
+    dim3 dimBlock(16, 16);
+    dim3 dimGrid((cols + dimBlock.x - 1) / dimBlock.x, (rows + dimBlock.y - 1) / dimBlock.y);
+    
+    colorConvertToGray<<<dimGrid, dimBlock>>>(d_rgb_image, d_gray_image, rows, cols);
+    cudaDeviceSynchronize();
+
+    cudaMemcpy(h_gray_image, d_gray_image, gray_image_size, cudaMemcpyDeviceToHost);
+
+    saveImageFile(h_gray_image, rows, cols, output_file);
+
+    cudaFree(d_rgb_image);
+    cudaFree(d_gray_image);
+    free(h_rgb_image);
+    free(h_gray_image);
+
+    return 0;
 }
 
+!nvcc -o grayscale grayscale.cu `pkg-config --cflags --libs opencv4`
+!./grayscale
+
+import cv2
+from matplotlib import pyplot as plt
+output_image = cv2.imread('/content/skzoo.jpg', cv2.IMREAD_GRAYSCALE)
+plt.imshow(output_image, cmap='gray')
+plt.axis('off')
+plt.show()
 ```
 ## Output:
-![image](https://github.com/Rakshithadevi/PCA---Mini-Project-Mini-Project---Face-Detection-or-Convert-an-image-into-gray-scale-image-using-CUD/assets/94165326/05997d07-e206-47e1-9f08-94cc91526421)
+![image](https://github.com/Rakshithadevi/PCA---Mini-Project-Mini-Project---Face-Detection-or-Convert-an-image-into-gray-scale-image-using-CUD/assets/94165326/c6f34488-69b6-4559-b793-c312aaaa8658)
 
 ![image](https://github.com/Rakshithadevi/PCA---Mini-Project-Mini-Project---Face-Detection-or-Convert-an-image-into-gray-scale-image-using-CUD/assets/94165326/f2cce9db-66d4-49b7-8d03-769e7f60b759)
 
