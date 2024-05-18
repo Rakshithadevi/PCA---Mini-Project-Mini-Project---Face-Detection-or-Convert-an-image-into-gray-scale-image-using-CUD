@@ -114,7 +114,8 @@ plt.show()
 ## Output:
 ![image](https://github.com/Rakshithadevi/PCA---Mini-Project-Mini-Project---Face-Detection-or-Convert-an-image-into-gray-scale-image-using-CUD/assets/94165326/c6f34488-69b6-4559-b793-c312aaaa8658)
 
-![image](https://github.com/Rakshithadevi/PCA---Mini-Project-Mini-Project---Face-Detection-or-Convert-an-image-into-gray-scale-image-using-CUD/assets/94165326/f2cce9db-66d4-49b7-8d03-769e7f60b759)
+![Uploading image.png…]()
+
 
 ## Result:
 The CUDA program successfully converts the input image to grayscale using the GPU. The resulting grayscale image is saved as an output file. This example demonstrates the power of GPU parallelism in accelerating image processing tasks.
